@@ -4,6 +4,8 @@ A local web app for browsing, searching, and managing your exported Claude conve
 
 ![Conversation list with Activity chart button](screenshot-index.png)
 
+![Activity chart showing conversations per month](screenshot-chart.png)
+
 ![Individual conversation view](screenshot-conversation.png)
 
 ## Requirements
