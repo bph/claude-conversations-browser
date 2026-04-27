@@ -80,3 +80,5 @@ python3 serve.py
 ```
 
 `generate_site.py` rebuilds all conversation pages. `serve.py` rebuilds the index on startup.
+
+Both scripts automatically skip any conversations you have previously deleted. Deletions are recorded in `deleted.json` (created locally, not tracked in git), so your curation survives fresh data imports.

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 DATA_FILE = "conversations.json"
 PROJECTS_FILE = "projects.json"
+DELETED_FILE = "deleted.json"
 OUT_DIR = "site"
 CONV_DIR = os.path.join(OUT_DIR, "c")
 
@@ -16,6 +17,15 @@ with open(DATA_FILE, encoding="utf-8") as f:
 
 with open(PROJECTS_FILE, encoding="utf-8") as f:
     projects = json.load(f)
+
+# Filter out previously deleted conversations
+if os.path.exists(DELETED_FILE):
+    with open(DELETED_FILE, encoding="utf-8") as f:
+        deleted = set(json.load(f))
+    before = len(conversations)
+    conversations = [c for c in conversations if c["uuid"] not in deleted]
+    if before != len(conversations):
+        print(f"Skipped {before - len(conversations)} previously deleted conversations")
 
 # Sort newest first
 conversations.sort(key=lambda c: c.get("updated_at", ""), reverse=True)

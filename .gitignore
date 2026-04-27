@@ -2,6 +2,9 @@
 conversations.json
 projects.json
 
+# Local curation state — keeps track of deleted conversations across re-imports
+deleted.json
+
 # Generated site — built from private conversation data
 site/
 

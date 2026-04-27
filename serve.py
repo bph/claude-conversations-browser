@@ -15,6 +15,19 @@ PORT = 9000
 SITE_DIR = "site"
 DATA_FILE = "conversations.json"
 PROJECTS_FILE = "projects.json"
+DELETED_FILE = "deleted.json"
+
+
+def load_deleted():
+    if os.path.exists(DELETED_FILE):
+        with open(DELETED_FILE, encoding='utf-8') as f:
+            return set(json.load(f))
+    return set()
+
+
+def save_deleted(deleted_set):
+    with open(DELETED_FILE, 'w', encoding='utf-8') as f:
+        json.dump(sorted(deleted_set), f, indent=2)
 
 MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -246,27 +259,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with open(PROJECTS_FILE, encoding='utf-8') as f:
             projects = json.load(f)
 
-        new_conversations = [c for c in conversations if c['uuid'] != uuid]
-        if len(new_conversations) == len(conversations):
+        deleted = load_deleted()
+        if uuid not in {c['uuid'] for c in conversations} and uuid not in deleted:
             self._json(404, {'error': 'Conversation not found'})
             return
 
-        # Save updated JSON
+        # Record in deleted.json — survives fresh data imports
+        deleted.add(uuid)
+        save_deleted(deleted)
+
+        # Remove from conversations.json too
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(new_conversations, f, ensure_ascii=False)
+            json.dump([c for c in conversations if c['uuid'] != uuid], f, ensure_ascii=False)
 
         # Remove conversation HTML page
         page_path = os.path.join(SITE_DIR, 'c', f'{uuid}.html')
         if os.path.exists(page_path):
             os.remove(page_path)
 
-        # Rebuild index
-        index_html = build_index(new_conversations, projects)
+        remaining = [c for c in conversations if c['uuid'] not in deleted]
+        index_html = build_index(remaining, projects)
         with open(os.path.join(SITE_DIR, 'index.html'), 'w', encoding='utf-8') as f:
             f.write(index_html)
 
-        print(f'Deleted {uuid} — {len(new_conversations)} conversations remaining')
-        self._json(200, {'ok': True, 'remaining': len(new_conversations)})
+        print(f'Deleted {uuid} — {len(remaining)} conversations remaining')
+        self._json(200, {'ok': True, 'remaining': len(remaining)})
 
     def _json(self, code, data):
         body = json.dumps(data).encode()
@@ -283,11 +300,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    # Regenerate index on startup so links use /c/... (server paths, not file://)
     with open(DATA_FILE, encoding='utf-8') as f:
         conversations = json.load(f)
     with open(PROJECTS_FILE, encoding='utf-8') as f:
         projects = json.load(f)
+
+    deleted = load_deleted()
+    if deleted:
+        before = len(conversations)
+        conversations = [c for c in conversations if c['uuid'] not in deleted]
+        print(f'Filtered {before - len(conversations)} previously deleted conversations ({len(conversations)} remaining)')
 
     index_html = build_index(conversations, projects)
     with open(os.path.join(SITE_DIR, 'index.html'), 'w', encoding='utf-8') as f:
