@@ -1,0 +1,13 @@
+# Exported Claude data — contains private conversations
+conversations.json
+projects.json
+
+# Generated site — built from private conversation data
+site/
+
+# macOS
+.DS_Store
+*.textClipping
+
+# Claude Code project settings
+.claude/
