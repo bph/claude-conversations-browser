@@ -109,8 +109,8 @@ header{{background:var(--surface);border-bottom:1px solid var(--border);padding:
 #no-results{{display:none;color:var(--muted);text-align:center;padding:48px 0;}}
 .chart-section{{background:var(--surface);border-bottom:1px solid var(--border);}}
 .chart-collapse{{overflow:hidden;max-height:0;transition:max-height .25s ease;}}
-.chart-section.open .chart-collapse{{max-height:160px;}}
-.chart-section .chart-inner{{padding:16px 32px 12px;opacity:0;transition:opacity .2s ease;}}
+.chart-section.open .chart-collapse{{max-height:200px;}}
+.chart-section .chart-inner{{padding:36px 32px 12px;opacity:0;transition:opacity .2s ease;}}
 .chart-section.open .chart-inner{{opacity:1;}}
 .chart-inner{{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:6px;}}
 .chart-bars{{display:flex;align-items:flex-end;gap:3px;height:80px;}}
