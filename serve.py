@@ -107,13 +107,16 @@ header{{background:var(--surface);border-bottom:1px solid var(--border);padding:
 .del-btn:hover{{color:var(--danger);}}
 .del-btn.confirm{{opacity:1;color:var(--danger);font-size:.8rem;font-weight:700;border:1px solid var(--danger);padding:3px 8px;border-radius:4px;}}
 #no-results{{display:none;color:var(--muted);text-align:center;padding:48px 0;}}
-.chart-section{{background:var(--surface);border-bottom:1px solid var(--border);padding:0 32px;overflow:hidden;max-height:0;transition:max-height .25s ease,padding .25s ease;}}
-.chart-section.open{{max-height:160px;padding:16px 32px;}}
+.chart-section{{background:var(--surface);border-bottom:1px solid var(--border);}}
+.chart-collapse{{overflow:hidden;max-height:0;transition:max-height .25s ease;}}
+.chart-section.open .chart-collapse{{max-height:160px;}}
+.chart-section .chart-inner{{padding:16px 32px 12px;opacity:0;transition:opacity .2s ease;}}
+.chart-section.open .chart-inner{{opacity:1;}}
 .chart-inner{{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:6px;}}
 .chart-bars{{display:flex;align-items:flex-end;gap:3px;height:80px;}}
 .chart-bar{{flex:1;min-width:4px;background:#bfdbfe;border-radius:3px 3px 0 0;cursor:pointer;transition:background .15s;position:relative;}}
 .chart-bar:hover,.chart-bar.active{{background:#2563eb;}}
-.chart-bar .bar-tip{{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;font-size:.72rem;padding:3px 7px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:20;}}
+.chart-bar .bar-tip{{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;font-size:.72rem;padding:3px 7px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:20;}}
 .chart-bar:hover .bar-tip{{display:block;}}
 .chart-labels{{display:flex;gap:3px;}}
 .chart-label{{flex:1;min-width:4px;font-size:.65rem;color:var(--muted);text-align:center;overflow:hidden;white-space:nowrap;text-overflow:clip;}}
@@ -133,9 +136,11 @@ header{{background:var(--surface);border-bottom:1px solid var(--border);padding:
   </nav>
 </header>
 <div class="chart-section" id="chart-section">
-  <div class="chart-inner">
-    <div class="chart-bars" id="chart-bars"></div>
-    <div class="chart-labels" id="chart-labels"></div>
+  <div class="chart-collapse">
+    <div class="chart-inner">
+      <div class="chart-bars" id="chart-bars"></div>
+      <div class="chart-labels" id="chart-labels"></div>
+    </div>
   </div>
 </div>
 <div class="toolbar">
