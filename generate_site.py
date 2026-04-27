@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 import json
 import os
+import sys
 import html
-from datetime import datetime, timezone
+from datetime import datetime
+
+# Use the canonical build_index from serve.py so both scripts produce identical index HTML
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from serve import build_index
+
+TOOL_RESULT_MAX_CHARS = 4000
 
 DATA_FILE = "conversations.json"
 PROJECTS_FILE = "projects.json"
@@ -12,11 +19,21 @@ CONV_DIR = os.path.join(OUT_DIR, "c")
 
 os.makedirs(CONV_DIR, exist_ok=True)
 
-with open(DATA_FILE, encoding="utf-8") as f:
-    conversations = json.load(f)
+try:
+    with open(DATA_FILE, encoding="utf-8") as f:
+        conversations = json.load(f)
+except FileNotFoundError:
+    sys.exit(f"Error: {DATA_FILE} not found.\nExport your Claude data at claude.ai/settings and place the file here.")
+except json.JSONDecodeError as e:
+    sys.exit(f"Error: {DATA_FILE} is not valid JSON: {e}")
 
-with open(PROJECTS_FILE, encoding="utf-8") as f:
-    projects = json.load(f)
+try:
+    with open(PROJECTS_FILE, encoding="utf-8") as f:
+        projects = json.load(f)
+except FileNotFoundError:
+    sys.exit(f"Error: {PROJECTS_FILE} not found.\nExport your Claude data at claude.ai/settings and place the file here.")
+except json.JSONDecodeError as e:
+    sys.exit(f"Error: {PROJECTS_FILE} is not valid JSON: {e}")
 
 # Filter out previously deleted conversations
 if os.path.exists(DELETED_FILE):
@@ -30,12 +47,6 @@ if os.path.exists(DELETED_FILE):
 # Sort newest first
 conversations.sort(key=lambda c: c.get("updated_at", ""), reverse=True)
 
-def fmt_date(iso):
-    try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        return dt.strftime("%b %d, %Y")
-    except Exception:
-        return iso or ""
 
 def fmt_datetime(iso):
     try:
@@ -43,6 +54,7 @@ def fmt_datetime(iso):
         return dt.strftime("%b %d, %Y %H:%M")
     except Exception:
         return iso or ""
+
 
 SHARED_CSS = """
 :root {
@@ -70,246 +82,19 @@ pre { background: var(--code-bg); border: 1px solid var(--border); border-radius
 pre code { background: none; padding: 0; font-size: 0.85em; }
 """
 
-INDEX_HTML = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude Conversations</title>
-<style>
-{SHARED_CSS}
-header {{ background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; }}
-.header-left h1 {{ font-size: 1.4rem; font-weight: 700; }}
-.header-left p {{ color: var(--muted); font-size: 0.9rem; margin-top: 2px; }}
-.header-nav a {{ font-size: 0.9rem; color: var(--muted); padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; }}
-.header-nav a:hover {{ color: var(--link); border-color: var(--link); text-decoration: none; }}
-.toolbar {{ padding: 12px 32px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }}
-.search-input {{ flex: 1; min-width: 180px; max-width: 340px; padding: 7px 13px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.93rem; background: var(--bg); }}
-.period-toggle {{ display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }}
-.period-toggle button {{ background: none; border: none; padding: 7px 14px; font-size: 0.88rem; cursor: pointer; color: var(--muted); border-right: 1px solid var(--border); }}
-.period-toggle button:last-child {{ border-right: none; }}
-.period-toggle button.active {{ background: var(--text); color: #fff; }}
-.period-nav {{ display: flex; align-items: center; gap: 6px; }}
-.period-nav button {{ background: none; border: 1px solid var(--border); border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 1rem; color: var(--muted); display: flex; align-items: center; justify-content: center; }}
-.period-nav button:hover {{ border-color: var(--text); color: var(--text); }}
-.period-nav button:disabled {{ opacity: 0.3; cursor: default; }}
-#period-label {{ font-size: 0.9rem; font-weight: 600; min-width: 150px; text-align: center; }}
-.result-count {{ font-size: 0.83rem; color: var(--muted); margin-left: auto; white-space: nowrap; }}
-.list {{ max-width: 860px; margin: 0 auto; padding: 24px 32px; }}
-.conv-item {{ background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 10px; display: flex; align-items: flex-start; gap: 16px; transition: box-shadow 0.1s; }}
-.conv-item:hover {{ box-shadow: 0 2px 8px rgba(0,0,0,0.07); }}
-.conv-meta {{ flex: 1; min-width: 0; }}
-.conv-name {{ font-weight: 600; font-size: 1rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-.conv-name a {{ color: inherit; }}
-.conv-name a:hover {{ color: var(--link); }}
-.conv-info {{ color: var(--muted); font-size: 0.83rem; margin-top: 3px; }}
-.conv-summary {{ color: var(--muted); font-size: 0.88rem; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }}
-.badge {{ background: var(--code-bg); border: 1px solid var(--border); border-radius: 12px; padding: 2px 10px; font-size: 0.78rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }}
-#no-results {{ display: none; color: var(--muted); text-align: center; padding: 48px 0; }}
-</style>
-</head>
-<body>
-<header>
-  <div class="header-left">
-    <h1>Claude Conversations</h1>
-    <p>{len(conversations)} conversations</p>
-  </div>
-  <nav class="header-nav">
-    <a href="projects.html">Projects ({len(projects)})</a>
-  </nav>
-</header>
-<div class="toolbar">
-  <input class="search-input" type="search" id="search" placeholder="Search conversations…" autofocus>
-  <div class="period-toggle">
-    <button data-mode="month" class="active">Month</button>
-    <button data-mode="week">Week</button>
-    <button data-mode="day">Day</button>
-  </div>
-  <div class="period-nav">
-    <button id="prev-btn" title="Previous">&#8592;</button>
-    <span id="period-label"></span>
-    <button id="next-btn" title="Next">&#8594;</button>
-  </div>
-  <span class="result-count" id="result-count"></span>
-</div>
-<div class="list" id="list">
-"""
-
-def iso_to_ymd(iso):
-    try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        return dt.strftime("%Y-%m-%d")
-    except Exception:
-        return ""
-
-items = []
-for conv in conversations:
-    uuid = conv["uuid"]
-    name = html.escape(conv.get("name") or "Untitled")
-    summary = html.escape(conv.get("summary") or "")
-    updated = fmt_date(conv.get("updated_at", ""))
-    ymd = iso_to_ymd(conv.get("updated_at", ""))
-    human_msgs = sum(1 for m in conv.get("chat_messages", []) if m.get("sender") == "human")
-
-    item = f"""<div class="conv-item" data-name="{name.lower()}" data-date="{ymd}">
-  <div class="conv-meta">
-    <div class="conv-name"><a href="c/{uuid}.html">{name}</a></div>
-    <div class="conv-info">{updated} &middot; {human_msgs} message{"s" if human_msgs != 1 else ""}</div>
-    {"<div class='conv-summary'>" + summary + "</div>" if summary else ""}
-  </div>
-  <span class="badge">{updated}</span>
-</div>"""
-    items.append(item)
-
-INDEX_HTML += "\n".join(items)
-INDEX_HTML += """
-  <div id="no-results">No conversations in this period.</div>
-</div>
-<script>
-const items = Array.from(document.querySelectorAll('.conv-item'));
-const noResults = document.getElementById('no-results');
-const resultCount = document.getElementById('result-count');
-const searchEl = document.getElementById('search');
-const periodLabel = document.getElementById('period-label');
-const prevBtn = document.getElementById('prev-btn');
-const nextBtn = document.getElementById('next-btn');
-
-// Collect all dates to know bounds
-const allDates = items.map(el => el.dataset.date).filter(Boolean).sort();
-const minDate = allDates[0];
-const maxDate = allDates[allDates.length - 1];
-
-let mode = 'month'; // month | week | day
-let offset = 0;     // 0 = period containing most recent conv, negative = older
-
-// Anchor: the period that contains the newest conversation
-function anchorDate() {
-  return maxDate; // YYYY-MM-DD
-}
-
-function parseYMD(s) {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function getMonday(date) {
-  const d = new Date(date);
-  const day = d.getDay() || 7;
-  d.setDate(d.getDate() - day + 1);
-  return d;
-}
-
-function addDays(date, n) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-}
-
-function periodBounds(mode, offset) {
-  const anchor = parseYMD(anchorDate());
-  if (mode === 'month') {
-    const y = anchor.getFullYear();
-    const m = anchor.getMonth() + offset;
-    const start = new Date(y, m, 1);
-    const end = new Date(y, m + 1, 0);
-    return { start, end };
-  } else if (mode === 'week') {
-    const monday = getMonday(anchor);
-    const start = addDays(monday, offset * 7);
-    const end = addDays(start, 6);
-    return { start, end };
-  } else {
-    const start = addDays(anchor, offset);
-    return { start, end: start };
-  }
-}
-
-function fmtPeriodLabel(mode, offset) {
-  const { start, end } = periodBounds(mode, offset);
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  if (mode === 'month') {
-    return months[start.getMonth()] + ' ' + start.getFullYear();
-  } else if (mode === 'week') {
-    const s = months[start.getMonth()] + ' ' + start.getDate();
-    const e = months[end.getMonth()] + ' ' + end.getDate() + ', ' + end.getFullYear();
-    return s + ' – ' + e;
-  } else {
-    return months[start.getMonth()] + ' ' + start.getDate() + ', ' + start.getFullYear();
-  }
-}
-
-function inPeriod(dateStr, mode, offset) {
-  if (!dateStr) return false;
-  const d = parseYMD(dateStr);
-  const { start, end } = periodBounds(mode, offset);
-  return d >= start && d <= end;
-}
-
-function toYMD(d) {
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-
-function hasPeriod(mode, off) {
-  const { start, end } = periodBounds(mode, off);
-  const s = toYMD(start), e = toYMD(end);
-  return allDates.some(d => d >= s && d <= e);
-}
-
-function applyFilters() {
-  const q = searchEl.value.toLowerCase().trim();
-  periodLabel.textContent = fmtPeriodLabel(mode, offset);
-
-  // disable nav buttons at data bounds
-  prevBtn.disabled = !hasPeriod(mode, offset - 1);
-  nextBtn.disabled = offset >= 0;
-
-  let visible = 0;
-  items.forEach(el => {
-    const matchSearch = !q || el.dataset.name.includes(q) || el.querySelector('.conv-summary')?.textContent.toLowerCase().includes(q);
-    const matchPeriod = inPeriod(el.dataset.date, mode, offset);
-    const show = matchSearch && matchPeriod;
-    el.style.display = show ? '' : 'none';
-    if (show) visible++;
-  });
-
-  noResults.style.display = visible === 0 ? '' : 'none';
-  resultCount.textContent = visible + ' conversation' + (visible !== 1 ? 's' : '');
-}
-
-// Period toggle buttons
-document.querySelectorAll('.period-toggle button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.period-toggle button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    mode = btn.dataset.mode;
-    offset = 0;
-    applyFilters();
-  });
-});
-
-prevBtn.addEventListener('click', () => { offset--; applyFilters(); });
-nextBtn.addEventListener('click', () => { offset++; applyFilters(); });
-searchEl.addEventListener('input', applyFilters);
-
-applyFilters();
-</script>
-</body>
-</html>"""
-
+# Build and write index using the same function as serve.py
+index_html = build_index(conversations, projects)
 with open(os.path.join(OUT_DIR, "index.html"), "w", encoding="utf-8") as f:
-    f.write(INDEX_HTML)
-
+    f.write(index_html)
 print(f"Generated index.html with {len(conversations)} conversations")
 
-# Generate individual conversation pages
-def render_message_content(msg):
-    """Render message content to safe HTML string."""
-    sender = msg.get("sender", "human")
-    parts = []
 
+# --- Individual conversation pages ---
+
+def render_message_content(msg):
+    parts = []
     content = msg.get("content", [])
     if not content:
-        # Fallback to text field
         text = msg.get("text", "")
         if text:
             parts.append(("text", text))
@@ -332,7 +117,6 @@ def render_message_content(msg):
                     elif isinstance(ci, str):
                         text_parts.append(ci)
                 parts.append(("tool_result", "\n".join(text_parts)))
-            # skip token_budget
 
     out = []
     for part in parts:
@@ -354,17 +138,23 @@ def render_message_content(msg):
         elif part[0] == "tool_result":
             text = part[1]
             if text.strip():
-                out.append(f'<div class="tool-result"><span class="tool-label">Result</span><pre><code>{html.escape(text[:4000])}{"..." if len(text) > 4000 else ""}</code></pre></div>')
-
+                truncated = text[:TOOL_RESULT_MAX_CHARS]
+                if len(text) > TOOL_RESULT_MAX_CHARS:
+                    note = f' <em style="font-weight:normal;text-transform:none">(showing {TOOL_RESULT_MAX_CHARS:,} of {len(text):,} characters)</em>'
+                else:
+                    note = ""
+                out.append(
+                    f'<div class="tool-result">'
+                    f'<span class="tool-label">Result{note}</span>'
+                    f'<pre><code>{html.escape(truncated)}</code></pre>'
+                    f'</div>'
+                )
     return "".join(out)
 
 
 def render_text(text):
-    """Convert markdown-ish text to HTML. Uses simple escaping + code block handling."""
     if not text:
         return ""
-
-    # We'll render this with marked.js client-side - just escape and wrap
     return f'<div class="md-content" data-md="{html.escape(text, quote=True)}"></div>'
 
 
@@ -457,9 +247,18 @@ document.querySelectorAll('.md-content').forEach(el => {{
     if (i + 1) % 50 == 0:
         print(f"  {i+1}/{len(conversations)} conversation pages generated…")
 
-print(f"Done! Open site/index.html in a browser.")
+print(f"Done! Run: python3 serve.py")
 
-# Generate projects page
+
+# --- Projects page ---
+
+def fmt_date(iso):
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        return dt.strftime("%b %d, %Y")
+    except Exception:
+        return iso or ""
+
 proj_cards = []
 for proj in projects:
     name = html.escape(proj.get("name") or "Untitled")
@@ -482,7 +281,6 @@ for proj in projects:
     for doc in docs:
         doc_name = html.escape(doc.get("filename") or "Document")
         doc_content = doc.get("content", "")
-        doc_id = doc.get("uuid", "")
         docs_html += f"""<div class="doc-block">
   <div class="doc-name">{doc_name}</div>
   <div class="md-content" data-md="{html.escape(doc_content, quote=True)}"></div>

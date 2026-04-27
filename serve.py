@@ -9,7 +9,10 @@ import json
 import os
 import html
 import re
+import threading
 from datetime import datetime
+
+_data_lock = threading.Lock()
 
 PORT = 9000
 SITE_DIR = "site"
@@ -254,25 +257,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         uuid = m.group(1)
 
-        with open(DATA_FILE, encoding='utf-8') as f:
-            conversations = json.load(f)
-        with open(PROJECTS_FILE, encoding='utf-8') as f:
-            projects = json.load(f)
+        with _data_lock:
+            with open(DATA_FILE, encoding='utf-8') as f:
+                conversations = json.load(f)
+            with open(PROJECTS_FILE, encoding='utf-8') as f:
+                projects = json.load(f)
 
-        deleted = load_deleted()
-        if uuid not in {c['uuid'] for c in conversations} and uuid not in deleted:
-            self._json(404, {'error': 'Conversation not found'})
-            return
+            deleted = load_deleted()
+            if uuid not in {c['uuid'] for c in conversations} and uuid not in deleted:
+                self._json(404, {'error': 'Conversation not found'})
+                return
 
-        # Record in deleted.json — survives fresh data imports
-        deleted.add(uuid)
-        save_deleted(deleted)
+            # Record in deleted.json — survives fresh data imports
+            deleted.add(uuid)
+            save_deleted(deleted)
 
-        # Remove from conversations.json too
-        with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump([c for c in conversations if c['uuid'] != uuid], f, ensure_ascii=False)
+            # Remove from conversations.json too
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump([c for c in conversations if c['uuid'] != uuid], f, ensure_ascii=False)
 
-        # Remove conversation HTML page
+        # Remove conversation HTML page (outside lock — no data integrity risk)
         page_path = os.path.join(SITE_DIR, 'c', f'{uuid}.html')
         if os.path.exists(page_path):
             os.remove(page_path)
