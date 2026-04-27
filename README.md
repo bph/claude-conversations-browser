@@ -2,9 +2,7 @@
 
 A local web app for browsing, searching, and managing your exported Claude conversation history.
 
-![Conversation list with month filter dropdown](screenshot-index.png)
-
-![Activity chart showing conversations per month](screenshot-chart.png)
+![Conversation list with Activity chart button](screenshot-index.png)
 
 ![Individual conversation view](screenshot-conversation.png)
 
