@@ -34,6 +34,7 @@ def save_deleted(deleted_set):
         json.dump(sorted(deleted_set), f, indent=2)
 
 def build_index(conversations, projects):
+    import json as _json
     conversations = sorted(conversations, key=lambda c: c.get('updated_at', ''), reverse=True)
 
     from collections import Counter
@@ -46,6 +47,11 @@ def build_index(conversations, projects):
         f'<option value="{ym}">{month_label(ym)} ({month_counts[ym]})</option>'
         for ym in unique_months
     )
+    # Chart data: oldest → newest for left-to-right bars
+    chart_data_json = _json.dumps([
+        {"month": ym, "label": month_label(ym), "count": month_counts[ym]}
+        for ym in sorted(month_counts.keys())
+    ])
 
     items_html = []
     for conv in conversations:
@@ -101,6 +107,18 @@ header{{background:var(--surface);border-bottom:1px solid var(--border);padding:
 .del-btn:hover{{color:var(--danger);}}
 .del-btn.confirm{{opacity:1;color:var(--danger);font-size:.8rem;font-weight:700;border:1px solid var(--danger);padding:3px 8px;border-radius:4px;}}
 #no-results{{display:none;color:var(--muted);text-align:center;padding:48px 0;}}
+.chart-section{{background:var(--surface);border-bottom:1px solid var(--border);padding:0 32px;overflow:hidden;max-height:0;transition:max-height .25s ease,padding .25s ease;}}
+.chart-section.open{{max-height:160px;padding:16px 32px;}}
+.chart-inner{{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:6px;}}
+.chart-bars{{display:flex;align-items:flex-end;gap:3px;height:80px;}}
+.chart-bar{{flex:1;min-width:4px;background:#bfdbfe;border-radius:3px 3px 0 0;cursor:pointer;transition:background .15s;position:relative;}}
+.chart-bar:hover,.chart-bar.active{{background:#2563eb;}}
+.chart-bar .bar-tip{{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;font-size:.72rem;padding:3px 7px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:20;}}
+.chart-bar:hover .bar-tip{{display:block;}}
+.chart-labels{{display:flex;gap:3px;}}
+.chart-label{{flex:1;min-width:4px;font-size:.65rem;color:var(--muted);text-align:center;overflow:hidden;white-space:nowrap;text-overflow:clip;}}
+.toggle-chart-btn{{font-size:.85rem;color:var(--muted);background:none;border:1px solid var(--border);border-radius:6px;padding:5px 11px;cursor:pointer;}}
+.toggle-chart-btn:hover{{color:var(--text);border-color:var(--text);}}
 </style>
 </head>
 <body>
@@ -109,8 +127,17 @@ header{{background:var(--surface);border-bottom:1px solid var(--border);padding:
     <h1>Claude Conversations</h1>
     <p>{len(conversations)} conversations</p>
   </div>
-  <nav class="header-nav"><a href="/projects.html">Projects ({len(projects)})</a></nav>
+  <nav class="header-nav" style="display:flex;gap:8px;align-items:center;">
+    <button class="toggle-chart-btn" id="toggle-chart">Activity</button>
+    <a href="/projects.html">Projects ({len(projects)})</a>
+  </nav>
 </header>
+<div class="chart-section" id="chart-section">
+  <div class="chart-inner">
+    <div class="chart-bars" id="chart-bars"></div>
+    <div class="chart-labels" id="chart-labels"></div>
+  </div>
+</div>
 <div class="toolbar">
   <input class="search-input" type="search" id="search" placeholder="Search conversations…" autofocus>
   <select id="month-select">
@@ -125,6 +152,54 @@ header{{background:var(--surface);border-bottom:1px solid var(--border);padding:
   <div id="no-results">No conversations found.</div>
 </div>
 <script>
+const chartData = {chart_data_json};
+const maxCount = Math.max(...chartData.map(d => d.count));
+const barsEl = document.getElementById('chart-bars');
+const labelsEl = document.getElementById('chart-labels');
+const monthSel2 = document.getElementById('month-select'); // alias used below
+
+chartData.forEach(d => {{
+  const pct = Math.round((d.count / maxCount) * 100);
+  const bar = document.createElement('div');
+  bar.className = 'chart-bar';
+  bar.style.height = pct + '%';
+  bar.dataset.month = d.month;
+  bar.innerHTML = `<span class="bar-tip">${{d.label}}: ${{d.count}}</span>`;
+  bar.addEventListener('click', () => {{
+    const sel = document.getElementById('month-select');
+    if (sel.value === d.month) {{
+      sel.value = '';
+    }} else {{
+      sel.value = d.month;
+    }}
+    sel.dispatchEvent(new Event('change'));
+    // update active state
+    document.querySelectorAll('.chart-bar').forEach(b => b.classList.toggle('active', b.dataset.month === sel.value));
+  }});
+  barsEl.appendChild(bar);
+
+  const lbl = document.createElement('div');
+  lbl.className = 'chart-label';
+  // Short label: "Apr '26"
+  const parts = d.label.split(' ');
+  lbl.textContent = parts[0] + ' ’' + parts[1].slice(2);
+  labelsEl.appendChild(lbl);
+}});
+
+// Sync chart active bar when month dropdown changes externally
+document.getElementById('month-select').addEventListener('change', () => {{
+  const v = document.getElementById('month-select').value;
+  document.querySelectorAll('.chart-bar').forEach(b => b.classList.toggle('active', b.dataset.month === v));
+}});
+
+const toggleBtn = document.getElementById('toggle-chart');
+const chartSection = document.getElementById('chart-section');
+toggleBtn.addEventListener('click', () => {{
+  chartSection.classList.toggle('open');
+  toggleBtn.style.color = chartSection.classList.contains('open') ? 'var(--link)' : '';
+  toggleBtn.style.borderColor = chartSection.classList.contains('open') ? 'var(--link)' : '';
+}});
+
 const list = document.querySelector('.list');
 const items = Array.from(document.querySelectorAll('.conv-item'));
 const noResults = document.getElementById('no-results');
