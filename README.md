@@ -2,6 +2,10 @@
 
 A local web app for browsing, searching, and managing your exported Claude conversation history.
 
+![Conversation list with month filter dropdown](screenshot-index.png)
+
+![Individual conversation view](screenshot-conversation.png)
+
 ## Requirements
 
 - Python 3.8 or later
