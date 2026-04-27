@@ -4,6 +4,8 @@ A local web app for browsing, searching, and managing your exported Claude conve
 
 ![Conversation list with month filter dropdown](screenshot-index.png)
 
+![Activity chart showing conversations per month](screenshot-chart.png)
+
 ![Individual conversation view](screenshot-conversation.png)
 
 ## Requirements
@@ -37,6 +39,7 @@ Open your browser at **http://localhost:9000**
 - **Month filter** — dropdown showing all months that have conversations, with counts (e.g. *Apr 2026 (77)*). Select "All months" to see everything.
 - **Sort order** — toggle between *Newest first* and *Oldest first*.
 - **Result count** — shows how many conversations match the current filter.
+- **Activity chart** — click *Activity* in the header to reveal a bar chart of conversations per month. Click any bar to filter the list to that month.
 
 ### Conversation view
 
