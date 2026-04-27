@@ -9,7 +9,6 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from serve import build_index
 
-TOOL_RESULT_MAX_CHARS = 4000
 
 DATA_FILE = "conversations.json"
 PROJECTS_FILE = "projects.json"
@@ -138,15 +137,10 @@ def render_message_content(msg):
         elif part[0] == "tool_result":
             text = part[1]
             if text.strip():
-                truncated = text[:TOOL_RESULT_MAX_CHARS]
-                if len(text) > TOOL_RESULT_MAX_CHARS:
-                    note = f' <em style="font-weight:normal;text-transform:none">(showing {TOOL_RESULT_MAX_CHARS:,} of {len(text):,} characters)</em>'
-                else:
-                    note = ""
                 out.append(
                     f'<div class="tool-result">'
-                    f'<span class="tool-label">Result{note}</span>'
-                    f'<pre><code>{html.escape(truncated)}</code></pre>'
+                    f'<span class="tool-label">Result</span>'
+                    f'<pre><code>{html.escape(text)}</code></pre>'
                     f'</div>'
                 )
     return "".join(out)
