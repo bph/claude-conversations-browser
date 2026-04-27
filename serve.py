@@ -10,7 +10,6 @@ import os
 import html
 import re
 import threading
-from datetime import datetime
 
 _data_lock = threading.Lock()
 
@@ -19,6 +18,8 @@ SITE_DIR = "site"
 DATA_FILE = "conversations.json"
 PROJECTS_FILE = "projects.json"
 DELETED_FILE = "deleted.json"
+
+from utils import fmt_date, iso_to_ymd, month_label
 
 
 def load_deleted():
@@ -31,26 +32,6 @@ def load_deleted():
 def save_deleted(deleted_set):
     with open(DELETED_FILE, 'w', encoding='utf-8') as f:
         json.dump(sorted(deleted_set), f, indent=2)
-
-MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-def fmt_date(iso):
-    try:
-        dt = datetime.fromisoformat(iso.replace('Z', '+00:00'))
-        return dt.strftime('%b %d, %Y')
-    except Exception:
-        return iso or ''
-
-def iso_to_ymd(iso):
-    try:
-        dt = datetime.fromisoformat(iso.replace('Z', '+00:00'))
-        return dt.strftime('%Y-%m-%d')
-    except Exception:
-        return ''
-
-def month_label(ym):
-    y, m = ym.split('-')
-    return MONTHS[int(m)-1] + ' ' + y
 
 def build_index(conversations, projects):
     conversations = sorted(conversations, key=lambda c: c.get('updated_at', ''), reverse=True)

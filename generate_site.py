@@ -3,57 +3,16 @@ import json
 import os
 import sys
 import html
-from datetime import datetime
 
-# Use the canonical build_index from serve.py so both scripts produce identical index HTML
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from serve import build_index
-
+from utils import fmt_date, fmt_datetime
 
 DATA_FILE = "conversations.json"
 PROJECTS_FILE = "projects.json"
 DELETED_FILE = "deleted.json"
 OUT_DIR = "site"
 CONV_DIR = os.path.join(OUT_DIR, "c")
-
-os.makedirs(CONV_DIR, exist_ok=True)
-
-try:
-    with open(DATA_FILE, encoding="utf-8") as f:
-        conversations = json.load(f)
-except FileNotFoundError:
-    sys.exit(f"Error: {DATA_FILE} not found.\nExport your Claude data at claude.ai/settings and place the file here.")
-except json.JSONDecodeError as e:
-    sys.exit(f"Error: {DATA_FILE} is not valid JSON: {e}")
-
-try:
-    with open(PROJECTS_FILE, encoding="utf-8") as f:
-        projects = json.load(f)
-except FileNotFoundError:
-    sys.exit(f"Error: {PROJECTS_FILE} not found.\nExport your Claude data at claude.ai/settings and place the file here.")
-except json.JSONDecodeError as e:
-    sys.exit(f"Error: {PROJECTS_FILE} is not valid JSON: {e}")
-
-# Filter out previously deleted conversations
-if os.path.exists(DELETED_FILE):
-    with open(DELETED_FILE, encoding="utf-8") as f:
-        deleted = set(json.load(f))
-    before = len(conversations)
-    conversations = [c for c in conversations if c["uuid"] not in deleted]
-    if before != len(conversations):
-        print(f"Skipped {before - len(conversations)} previously deleted conversations")
-
-# Sort newest first
-conversations.sort(key=lambda c: c.get("updated_at", ""), reverse=True)
-
-
-def fmt_datetime(iso):
-    try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        return dt.strftime("%b %d, %Y %H:%M")
-    except Exception:
-        return iso or ""
-
 
 SHARED_CSS = """
 :root {
@@ -81,14 +40,41 @@ pre { background: var(--code-bg); border: 1px solid var(--border); border-radius
 pre code { background: none; padding: 0; font-size: 0.85em; }
 """
 
-# Build and write index using the same function as serve.py
-index_html = build_index(conversations, projects)
-with open(os.path.join(OUT_DIR, "index.html"), "w", encoding="utf-8") as f:
-    f.write(index_html)
-print(f"Generated index.html with {len(conversations)} conversations")
+CONV_CSS = f"""
+{SHARED_CSS}
+header {{ background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 10; }}
+.back-link {{ color: var(--muted); font-size: 0.88rem; white-space: nowrap; }}
+.back-link:hover {{ color: var(--link); }}
+header h1 {{ font-size: 1.05rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.conv-meta {{ padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); color: var(--muted); font-size: 0.83rem; }}
+.messages {{ max-width: 820px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }}
+.message {{ border-radius: 8px; padding: 16px 20px; }}
+.message.human {{ background: var(--human-bg); border: 1px solid var(--human-border); }}
+.message.assistant {{ background: var(--ai-bg); border: 1px solid var(--ai-border); }}
+.msg-header {{ font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 10px; }}
+.message.human .msg-header {{ color: #3b5bdb; }}
+.message.assistant .msg-header {{ color: #0d7761; }}
+.md-content p {{ margin: 8px 0; }}
+.md-content p:first-child {{ margin-top: 0; }}
+.md-content p:last-child {{ margin-bottom: 0; }}
+.md-content ul, .md-content ol {{ padding-left: 20px; margin: 8px 0; }}
+.md-content h1,.md-content h2,.md-content h3,.md-content h4 {{ margin: 14px 0 6px; font-weight: 700; }}
+.md-content h1 {{ font-size: 1.3em; }}
+.md-content h2 {{ font-size: 1.15em; }}
+.md-content h3 {{ font-size: 1.05em; }}
+.md-content blockquote {{ border-left: 3px solid var(--border); padding-left: 12px; color: var(--muted); margin: 8px 0; }}
+.tool-block {{ background: var(--tool-bg); border: 1px solid var(--tool-border); border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 0.88em; }}
+.tool-result {{ background: var(--tool-bg); border: 1px solid var(--tool-border); border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 0.85em; }}
+.tool-label {{ display: inline-block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 6px; }}
+.msg-time {{ font-size: 0.75rem; color: var(--muted); margin-top: 10px; }}
+"""
 
 
-# --- Individual conversation pages ---
+def render_text(text):
+    if not text:
+        return ""
+    return f'<div class="md-content" data-md="{html.escape(text, quote=True)}"></div>'
+
 
 def render_message_content(msg):
     parts = []
@@ -146,65 +132,67 @@ def render_message_content(msg):
     return "".join(out)
 
 
-def render_text(text):
-    if not text:
-        return ""
-    return f'<div class="md-content" data-md="{html.escape(text, quote=True)}"></div>'
+def main():
+    os.makedirs(CONV_DIR, exist_ok=True)
 
+    try:
+        with open(DATA_FILE, encoding="utf-8") as f:
+            conversations = json.load(f)
+    except FileNotFoundError:
+        sys.exit(f"Error: {DATA_FILE} not found.\nExport your Claude data at claude.ai/settings and place the file here.")
+    except json.JSONDecodeError as e:
+        sys.exit(f"Error: {DATA_FILE} is not valid JSON: {e}")
 
-CONV_CSS = f"""
-{SHARED_CSS}
-header {{ background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 10; }}
-.back-link {{ color: var(--muted); font-size: 0.88rem; white-space: nowrap; }}
-.back-link:hover {{ color: var(--link); }}
-header h1 {{ font-size: 1.05rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-.conv-meta {{ padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); color: var(--muted); font-size: 0.83rem; }}
-.messages {{ max-width: 820px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }}
-.message {{ border-radius: 8px; padding: 16px 20px; }}
-.message.human {{ background: var(--human-bg); border: 1px solid var(--human-border); }}
-.message.assistant {{ background: var(--ai-bg); border: 1px solid var(--ai-border); }}
-.msg-header {{ font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 10px; }}
-.message.human .msg-header {{ color: #3b5bdb; }}
-.message.assistant .msg-header {{ color: #0d7761; }}
-.md-content p {{ margin: 8px 0; }}
-.md-content p:first-child {{ margin-top: 0; }}
-.md-content p:last-child {{ margin-bottom: 0; }}
-.md-content ul, .md-content ol {{ padding-left: 20px; margin: 8px 0; }}
-.md-content h1,.md-content h2,.md-content h3,.md-content h4 {{ margin: 14px 0 6px; font-weight: 700; }}
-.md-content h1 {{ font-size: 1.3em; }}
-.md-content h2 {{ font-size: 1.15em; }}
-.md-content h3 {{ font-size: 1.05em; }}
-.md-content blockquote {{ border-left: 3px solid var(--border); padding-left: 12px; color: var(--muted); margin: 8px 0; }}
-.tool-block {{ background: var(--tool-bg); border: 1px solid var(--tool-border); border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 0.88em; }}
-.tool-result {{ background: var(--tool-bg); border: 1px solid var(--tool-border); border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 0.85em; }}
-.tool-label {{ display: inline-block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 6px; }}
-.msg-time {{ font-size: 0.75rem; color: var(--muted); margin-top: 10px; }}
-"""
+    try:
+        with open(PROJECTS_FILE, encoding="utf-8") as f:
+            projects = json.load(f)
+    except FileNotFoundError:
+        sys.exit(f"Error: {PROJECTS_FILE} not found.\nExport your Claude data at claude.ai/settings and place the file here.")
+    except json.JSONDecodeError as e:
+        sys.exit(f"Error: {PROJECTS_FILE} is not valid JSON: {e}")
 
-for i, conv in enumerate(conversations):
-    uuid = conv["uuid"]
-    name = html.escape(conv.get("name") or "Untitled")
-    created = fmt_datetime(conv.get("created_at", ""))
-    updated = fmt_datetime(conv.get("updated_at", ""))
-    messages = conv.get("chat_messages", [])
+    if os.path.exists(DELETED_FILE):
+        with open(DELETED_FILE, encoding="utf-8") as f:
+            deleted = set(json.load(f))
+        before = len(conversations)
+        conversations = [c for c in conversations if c["uuid"] not in deleted]
+        if before != len(conversations):
+            print(f"Skipped {before - len(conversations)} previously deleted conversations")
 
-    msg_html_parts = []
-    for msg in messages:
-        sender = msg.get("sender", "human")
-        if sender not in ("human", "assistant"):
-            continue
-        label = "You" if sender == "human" else "Claude"
-        ts = fmt_datetime(msg.get("created_at", ""))
-        body = render_message_content(msg)
-        if not body.strip():
-            continue
-        msg_html_parts.append(f"""<div class="message {html.escape(sender)}">
+    conversations.sort(key=lambda c: c.get("updated_at", ""), reverse=True)
+
+    # Index
+    index_html = build_index(conversations, projects)
+    with open(os.path.join(OUT_DIR, "index.html"), "w", encoding="utf-8") as f:
+        f.write(index_html)
+    print(f"Generated index.html with {len(conversations)} conversations")
+
+    # Conversation pages
+    total = len(conversations)
+    for i, conv in enumerate(conversations):
+        uuid = conv["uuid"]
+        name = html.escape(conv.get("name") or "Untitled")
+        created = fmt_datetime(conv.get("created_at", ""))
+        updated = fmt_datetime(conv.get("updated_at", ""))
+        messages = conv.get("chat_messages", [])
+
+        msg_html_parts = []
+        for msg in messages:
+            sender = msg.get("sender", "human")
+            if sender not in ("human", "assistant"):
+                continue
+            label = "You" if sender == "human" else "Claude"
+            ts = fmt_datetime(msg.get("created_at", ""))
+            body = render_message_content(msg)
+            if not body.strip():
+                continue
+            msg_html_parts.append(f"""<div class="message {html.escape(sender)}">
   <div class="msg-header">{label}</div>
   {body}
   <div class="msg-time">{ts}</div>
 </div>""")
 
-    page = f"""<!DOCTYPE html>
+        page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -235,52 +223,42 @@ document.querySelectorAll('.md-content').forEach(el => {{
 </body>
 </html>"""
 
-    with open(os.path.join(CONV_DIR, f"{uuid}.html"), "w", encoding="utf-8") as f:
-        f.write(page)
+        with open(os.path.join(CONV_DIR, f"{uuid}.html"), "w", encoding="utf-8") as f:
+            f.write(page)
 
-    if (i + 1) % 50 == 0:
-        print(f"  {i+1}/{len(conversations)} conversation pages generated…")
+        n = i + 1
+        if n % 50 == 0 or n == total:
+            print(f"  {n}/{total} conversation pages generated")
 
-print(f"Done! Run: python3 serve.py")
+    # Projects page
+    proj_cards = []
+    for proj in projects:
+        name = html.escape(proj.get("name") or "Untitled")
+        desc = html.escape(proj.get("description") or "")
+        created = fmt_date(proj.get("created_at", ""))
+        updated = fmt_date(proj.get("updated_at", ""))
+        is_private = proj.get("is_private", False)
+        is_starter = proj.get("is_starter_project", False)
+        docs = proj.get("docs", [])
+        creator = proj.get("creator", {}).get("full_name", "")
 
+        tags = []
+        if is_private:
+            tags.append('<span class="tag tag-private">Private</span>')
+        if is_starter:
+            tags.append('<span class="tag tag-starter">Starter</span>')
+        tags_html = " ".join(tags)
 
-# --- Projects page ---
-
-def fmt_date(iso):
-    try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        return dt.strftime("%b %d, %Y")
-    except Exception:
-        return iso or ""
-
-proj_cards = []
-for proj in projects:
-    name = html.escape(proj.get("name") or "Untitled")
-    desc = html.escape(proj.get("description") or "")
-    created = fmt_date(proj.get("created_at", ""))
-    updated = fmt_date(proj.get("updated_at", ""))
-    is_private = proj.get("is_private", False)
-    is_starter = proj.get("is_starter_project", False)
-    docs = proj.get("docs", [])
-    creator = proj.get("creator", {}).get("full_name", "")
-
-    tags = []
-    if is_private:
-        tags.append('<span class="tag tag-private">Private</span>')
-    if is_starter:
-        tags.append('<span class="tag tag-starter">Starter</span>')
-    tags_html = " ".join(tags)
-
-    docs_html = ""
-    for doc in docs:
-        doc_name = html.escape(doc.get("filename") or "Document")
-        doc_content = doc.get("content", "")
-        docs_html += f"""<div class="doc-block">
+        docs_html = ""
+        for doc in docs:
+            doc_name = html.escape(doc.get("filename") or "Document")
+            doc_content = doc.get("content", "")
+            docs_html += f"""<div class="doc-block">
   <div class="doc-name">{doc_name}</div>
   <div class="md-content" data-md="{html.escape(doc_content, quote=True)}"></div>
 </div>"""
 
-    proj_cards.append(f"""<div class="proj-card">
+        proj_cards.append(f"""<div class="proj-card">
   <div class="proj-header">
     <div>
       <div class="proj-name">{name} {tags_html}</div>
@@ -291,7 +269,7 @@ for proj in projects:
   {docs_html}
 </div>""")
 
-projects_page = f"""<!DOCTYPE html>
+    projects_page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -343,7 +321,11 @@ document.querySelectorAll('.md-content').forEach(el => {{
 </body>
 </html>"""
 
-with open(os.path.join(OUT_DIR, "projects.html"), "w", encoding="utf-8") as f:
-    f.write(projects_page)
+    with open(os.path.join(OUT_DIR, "projects.html"), "w", encoding="utf-8") as f:
+        f.write(projects_page)
+    print(f"Generated projects.html with {len(projects)} projects.")
+    print("Done! Run: python3 serve.py")
 
-print(f"Generated projects.html with {len(projects)} projects.")
+
+if __name__ == "__main__":
+    main()
